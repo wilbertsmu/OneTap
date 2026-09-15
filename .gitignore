@@ -1,0 +1,7 @@
+# Real student/card data must never be committed — only the blank templates.
+# Anything dropped into templates/ is ignored unless it matches the
+# *_import_template.* naming or is the README.
+templates/*
+!templates/*_import_template.csv
+!templates/*_import_template.xlsx
+!templates/README.md

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The dev/staging server does not have HTTPS configured yet, so cleartext
+    traffic is explicitly allowed for that host only. Remove this override
+    once the API is served over HTTPS.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">103.148.246.91</domain>
+    </domain-config>
+</network-security-config>
