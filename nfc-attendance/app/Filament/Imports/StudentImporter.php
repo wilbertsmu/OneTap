@@ -16,21 +16,27 @@ class StudentImporter extends Importer
         return [
             ImportColumn::make('id_number')
                 ->requiredMapping()
-                ->rules([
-                    'required',
-                    'max:255',
-                    function (string $attribute, $value, \Closure $fail) {
-                        if (Student::where('id_number', $value)->exists()) {
-                            $fail("A student with ID Number \"{$value}\" already exists — this row was discarded.");
-                        }
-                    },
-                ]),
+                ->rules(['required', 'max:255']),
+            // Names are only set when creating a brand-new student — if the
+            // id_number already matches an existing student, the row updates
+            // that student's course/year_level/department/status instead,
+            // without touching the name already on file.
             ImportColumn::make('first_name')
                 ->requiredMapping()
-                ->rules(['required', 'max:255']),
+                ->rules(['required', 'max:255'])
+                ->fillRecordUsing(function (Student $record, ?string $state) {
+                    if (! $record->exists) {
+                        $record->first_name = $state;
+                    }
+                }),
             ImportColumn::make('last_name')
                 ->requiredMapping()
-                ->rules(['required', 'max:255']),
+                ->rules(['required', 'max:255'])
+                ->fillRecordUsing(function (Student $record, ?string $state) {
+                    if (! $record->exists) {
+                        $record->last_name = $state;
+                    }
+                }),
             ImportColumn::make('course')
                 ->requiredMapping()
                 ->rules(['required', 'max:255']),
@@ -48,9 +54,11 @@ class StudentImporter extends Importer
 
     public function resolveRecord(): ?Student
     {
-        // Validation above already rejects rows whose id_number exists, so
-        // every row that reaches here is guaranteed new.
-        return new Student();
+        // If a student with this id_number already exists, update it
+        // (course/year_level/department/status) instead of discarding the row.
+        return Student::firstOrNew([
+            'id_number' => $this->data['id_number'],
+        ]);
     }
 
     public static function getCompletedNotificationBody(Import $import): string
