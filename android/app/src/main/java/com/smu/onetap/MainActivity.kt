@@ -2,6 +2,8 @@ package com.smu.onetap
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.os.Bundle
@@ -23,6 +25,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var repository: ScanRepository
     private lateinit var prefs: Prefs
     private var nfcAdapter: NfcAdapter? = null
+    private var toneGenerator: ToneGenerator? = null
+    private var lastScannedUid: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,10 +36,17 @@ class MainActivity : AppCompatActivity() {
         prefs = Prefs(this)
         repository = ScanRepository(this)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+        toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, DUPLICATE_BEEP_VOLUME)
 
         binding.settingsButton.setOnClickListener { showSettingsDialog() }
 
         refreshPendingCount()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        toneGenerator?.release()
+        toneGenerator = null
     }
 
     override fun onResume() {
@@ -103,8 +114,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleScan(uid: String) {
+        // Fires the instant the tag is read, independent of the network
+        // round-trip — the immediate cue that a duplicate tap happened.
+        if (uid == lastScannedUid) {
+            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, DUPLICATE_BEEP_DURATION_MS)
+        }
+        lastScannedUid = uid
+
         binding.resultIcon.text = "⏳"
-        binding.statusText.text = "Reading card…"
+        binding.statusText.text = "Card detected — looking up…"
         binding.studentText.text = ""
         binding.detailText.text = uid
 
@@ -183,5 +201,10 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    companion object {
+        private const val DUPLICATE_BEEP_DURATION_MS = 150
+        private const val DUPLICATE_BEEP_VOLUME = 80 // 0-100
     }
 }
