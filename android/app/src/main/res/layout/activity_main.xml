@@ -15,6 +15,16 @@
         android:textStyle="bold"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/historyButton" />
+
+    <ImageButton
+        android:id="@+id/historyButton"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Scan History"
+        android:src="@android:drawable/ic_menu_recent_history"
+        app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintEnd_toStartOf="@id/settingsButton" />
 
     <ImageButton

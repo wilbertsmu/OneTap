@@ -5,9 +5,14 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [PendingScan::class], version = 1, exportSchema = false)
+@Database(
+    entities = [PendingScan::class, ScanHistoryEntry::class],
+    version = 2,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun pendingScanDao(): PendingScanDao
+    abstract fun scanHistoryDao(): ScanHistoryDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -18,7 +23,14 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "onetap.db"
-                ).build().also { instance = it }
+                )
+                    // Adding scan_history in v2; any scan still mid-sync at
+                    // update time would be lost, which is an acceptable
+                    // tradeoff for this internal tool over hand-writing a
+                    // migration for one small queue table.
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    .also { instance = it }
             }
     }
 }

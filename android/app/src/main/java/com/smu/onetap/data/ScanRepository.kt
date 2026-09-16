@@ -19,7 +19,9 @@ sealed class ScanOutcome {
 class ScanRepository(private val context: Context) {
 
     private val prefs = Prefs(context)
-    private val dao = AppDatabase.get(context).pendingScanDao()
+    private val db = AppDatabase.get(context)
+    private val dao = db.pendingScanDao()
+    private val historyDao = db.scanHistoryDao()
 
     suspend fun submitScan(uid: String): ScanOutcome {
         val nowIso = isoNow()
@@ -31,6 +33,16 @@ class ScanRepository(private val context: Context) {
             )
             val body = response.body()
             if (response.isSuccessful && body != null) {
+                historyDao.insert(
+                    ScanHistoryEntry(
+                        uid = uid,
+                        holderName = body.student?.fullName,
+                        idNumber = body.student?.idNumber,
+                        result = body.result,
+                        synced = true
+                    )
+                )
+                historyDao.trimTo(MAX_HISTORY_ENTRIES)
                 ScanOutcome.Online(body)
             } else {
                 queue(uid, nowIso)
@@ -41,12 +53,18 @@ class ScanRepository(private val context: Context) {
     }
 
     private suspend fun queue(uid: String, scannedAtIso: String): ScanOutcome.Queued {
-        dao.insert(PendingScan(uid = uid, deviceId = prefs.deviceId, scannedAtIso = scannedAtIso))
+        val historyId = historyDao.insert(
+            ScanHistoryEntry(uid = uid, holderName = null, idNumber = null, result = "pending_sync", synced = false)
+        )
+        dao.insert(PendingScan(uid = uid, deviceId = prefs.deviceId, scannedAtIso = scannedAtIso, historyId = historyId))
+        historyDao.trimTo(MAX_HISTORY_ENTRIES)
         scheduleSync()
         return ScanOutcome.Queued(dao.count())
     }
 
     suspend fun pendingCount(): Int = dao.count()
+
+    suspend fun recentHistory(): List<ScanHistoryEntry> = historyDao.getRecent(MAX_HISTORY_ENTRIES)
 
     fun scheduleSync() {
         val request = OneTimeWorkRequestBuilder<SyncWorker>().build()
@@ -55,6 +73,8 @@ class ScanRepository(private val context: Context) {
     }
 
     companion object {
+        const val MAX_HISTORY_ENTRIES = 200
+
         fun isoNow(): String {
             val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
             fmt.timeZone = TimeZone.getDefault()

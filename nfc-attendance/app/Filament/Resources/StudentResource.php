@@ -18,6 +18,11 @@ class StudentResource extends Resource
 {
     protected static ?string $model = Student::class;
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->canManage('manage_students') ?? false;
+    }
+
     protected static ?string $navigationIcon = 'heroicon-o-academic-cap';
 
     public static function form(Form $form): Form

@@ -2,12 +2,15 @@
 
 namespace App\Filament\Resources;
 
+use App\Filament\Exports\AttendanceLogExporter;
+use App\Filament\Pages\MissingEntries;
 use App\Filament\Resources\AttendanceLogResource\Pages;
 use App\Models\AttendanceLog;
 use App\Models\Employee;
 use App\Models\Student;
 use App\Services\AttendanceLogger;
 use Closure;
+use Filament\Actions\Exports\Enums\ExportFormat;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Forms\Get;
@@ -15,11 +18,17 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Tables\Actions\ExportAction;
 use Illuminate\Database\Eloquent\Builder;
 
 class AttendanceLogResource extends Resource
 {
     protected static ?string $model = AttendanceLog::class;
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->canManage('manage_entry_logs') ?? false;
+    }
 
     protected static ?string $navigationIcon = 'heroicon-o-clipboard-document-list';
 
@@ -137,21 +146,59 @@ class AttendanceLogResource extends Resource
                     ->searchable(),
                 Tables\Filters\Filter::make('scanned_at')
                     ->form([
-                        Forms\Components\DatePicker::make('from'),
-                        Forms\Components\DatePicker::make('until'),
+                        Forms\Components\DateTimePicker::make('from')
+                            ->seconds(false),
+                        Forms\Components\DateTimePicker::make('until')
+                            ->seconds(false),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
-                            ->when($data['from'], fn (Builder $q, $date) => $q->whereDate('scanned_at', '>=', $date))
-                            ->when($data['until'], fn (Builder $q, $date) => $q->whereDate('scanned_at', '<=', $date));
+                            ->when($data['from'], fn (Builder $q, $datetime) => $q->where('scanned_at', '>=', $datetime))
+                            ->when($data['until'], fn (Builder $q, $datetime) => $q->where('scanned_at', '<=', $datetime));
+                    })
+                    ->indicateUsing(function (array $data): array {
+                        $indicators = [];
+
+                        if ($data['from'] ?? null) {
+                            $indicators['from'] = 'From ' . \Illuminate\Support\Carbon::parse($data['from'])->format('M j, Y g:i A');
+                        }
+
+                        if ($data['until'] ?? null) {
+                            $indicators['until'] = 'Until ' . \Illuminate\Support\Carbon::parse($data['until'])->format('M j, Y g:i A');
+                        }
+
+                        return $indicators;
                     }),
                 Tables\Filters\SelectFilter::make('source')
                     ->options([
                         'scan' => 'NFC Scan',
                         'manual' => 'Manually Encoded',
                     ]),
+                Tables\Filters\SelectFilter::make('department')
+                    ->options(fn () => Student::query()->distinct()->pluck('department', 'department')
+                        ->union(Employee::query()->distinct()->pluck('department', 'department'))
+                        ->sort()
+                        ->toArray())
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query->when(
+                            $data['value'] ?? null,
+                            fn (Builder $q, $department) => $q->where(function (Builder $q) use ($department) {
+                                $q->whereHas('student', fn ($sq) => $sq->where('department', $department))
+                                    ->orWhereHas('employee', fn ($eq) => $eq->where('department', $department));
+                            })
+                        );
+                    }),
             ])
             ->headerActions([
+                Tables\Actions\Action::make('missingEntries')
+                    ->label('Missing Entries')
+                    ->icon('heroicon-o-user-minus')
+                    ->color('gray')
+                    ->url(fn () => MissingEntries::getUrl()),
+                ExportAction::make()
+                    ->label('Export to Excel')
+                    ->exporter(AttendanceLogExporter::class)
+                    ->formats([ExportFormat::Xlsx]),
                 Tables\Actions\Action::make('manualEncode')
                     ->label('Manually Encode Entry')
                     ->icon('heroicon-o-pencil-square')

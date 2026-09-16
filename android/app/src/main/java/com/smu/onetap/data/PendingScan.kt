@@ -13,5 +13,7 @@ data class PendingScan(
     val uid: String,
     val deviceId: String?,
     val scannedAtIso: String,
-    val createdAtMillis: Long = System.currentTimeMillis()
+    val createdAtMillis: Long = System.currentTimeMillis(),
+    /** The scan_history row to update once this finally syncs. */
+    val historyId: Long
 )

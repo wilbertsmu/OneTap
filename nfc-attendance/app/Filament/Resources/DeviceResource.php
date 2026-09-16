@@ -15,6 +15,11 @@ class DeviceResource extends Resource
 {
     protected static ?string $model = Device::class;
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->canManage('manage_devices') ?? false;
+    }
+
     protected static ?string $navigationIcon = 'heroicon-o-device-phone-mobile';
 
     public static function form(Form $form): Form

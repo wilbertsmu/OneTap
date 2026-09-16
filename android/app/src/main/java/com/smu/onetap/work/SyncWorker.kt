@@ -19,7 +19,9 @@ class SyncWorker(
 
     override suspend fun doWork(): Result {
         val prefs = Prefs(applicationContext)
-        val dao = AppDatabase.get(applicationContext).pendingScanDao()
+        val db = AppDatabase.get(applicationContext)
+        val dao = db.pendingScanDao()
+        val historyDao = db.scanHistoryDao()
         val api = ApiClient.create(prefs)
 
         val pending = dao.getAll()
@@ -32,7 +34,14 @@ class SyncWorker(
                 val response = api.postScan(
                     ScanRequest(uid = scan.uid, deviceId = scan.deviceId, scannedAt = scan.scannedAtIso)
                 )
-                if (response.isSuccessful) {
+                val body = response.body()
+                if (response.isSuccessful && body != null) {
+                    historyDao.markSynced(
+                        id = scan.historyId,
+                        holderName = body.student?.fullName,
+                        idNumber = body.student?.idNumber,
+                        result = body.result
+                    )
                     dao.delete(scan)
                 } else {
                     allSucceeded = false

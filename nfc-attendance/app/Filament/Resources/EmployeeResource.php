@@ -18,6 +18,11 @@ class EmployeeResource extends Resource
 {
     protected static ?string $model = Employee::class;
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->canManage('manage_employees') ?? false;
+    }
+
     protected static ?string $navigationIcon = 'heroicon-o-briefcase';
 
     public static function form(Form $form): Form

@@ -26,7 +26,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
     private var nfcAdapter: NfcAdapter? = null
     private var toneGenerator: ToneGenerator? = null
-    private var lastScannedUid: String? = null
+
+    /** UID -> when it was last accepted (not just last attempted) as a scan. */
+    private val recentScanTimestamps = mutableMapOf<String, Long>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +41,9 @@ class MainActivity : AppCompatActivity() {
         toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, DUPLICATE_BEEP_VOLUME)
 
         binding.settingsButton.setOnClickListener { showSettingsDialog() }
+        binding.historyButton.setOnClickListener {
+            startActivity(Intent(this, HistoryActivity::class.java))
+        }
 
         refreshPendingCount()
     }
@@ -114,12 +119,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleScan(uid: String) {
+        val now = System.currentTimeMillis()
+        val lastAccepted = recentScanTimestamps[uid]
+        val secondsSinceLast = lastAccepted?.let { (now - it) / 1000 }
+
         // Fires the instant the tag is read, independent of the network
-        // round-trip — the immediate cue that a duplicate tap happened.
-        if (uid == lastScannedUid) {
+        // round-trip — the immediate, zero-latency duplicate cue.
+        if (lastAccepted != null && now - lastAccepted < DUPLICATE_COOLDOWN_MS) {
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, DUPLICATE_BEEP_DURATION_MS)
+            binding.resultIcon.text = "⏱️"
+            binding.statusText.text = "Same card tapped ${secondsSinceLast}s ago — ignored"
+            binding.studentText.text = "The card has already been recorded"
+            binding.detailText.text = uid
+            return
         }
-        lastScannedUid = uid
+
+        pruneOldTimestamps(now)
+        recentScanTimestamps[uid] = now
 
         binding.resultIcon.text = "⏳"
         binding.statusText.text = "Card detected — looking up…"
@@ -133,6 +149,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun pruneOldTimestamps(now: Long) {
+        recentScanTimestamps.entries.removeAll { now - it.value >= DUPLICATE_COOLDOWN_MS }
+    }
+
     private fun renderOutcome(outcome: ScanOutcome) {
         when (outcome) {
             is ScanOutcome.Online -> {
@@ -140,7 +160,7 @@ class MainActivity : AppCompatActivity() {
                 when (response.result) {
                     "success" -> {
                         binding.resultIcon.text = "✅"
-                        binding.statusText.text = "Welcome"
+                        binding.statusText.text = "Ready"
                         binding.studentText.text = response.student?.fullName ?: ""
                         binding.detailText.text = listOfNotNull(
                             response.student?.idNumber,
@@ -206,5 +226,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val DUPLICATE_BEEP_DURATION_MS = 150
         private const val DUPLICATE_BEEP_VOLUME = 80 // 0-100
+        private const val DUPLICATE_COOLDOWN_MS = 60_000L
     }
 }

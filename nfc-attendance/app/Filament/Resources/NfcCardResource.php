@@ -16,10 +16,16 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Actions\ImportAction;
+use Illuminate\Database\Eloquent\Builder;
 
 class NfcCardResource extends Resource
 {
     protected static ?string $model = NfcCard::class;
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->canManage('manage_nfc_cards') ?? false;
+    }
 
     protected static ?string $navigationIcon = 'heroicon-o-credit-card';
 
@@ -104,7 +110,20 @@ class NfcCardResource extends Resource
                 Tables\Columns\TextColumn::make('holder_name')
                     ->label('Assigned Name')
                     ->getStateUsing(fn (NfcCard $record) => $record->holder()?->full_name)
-                    ->placeholder('—'),
+                    ->placeholder('—')
+                    ->searchable(query: function (Builder $query, string $search): Builder {
+                        return $query->where(function (Builder $query) use ($search) {
+                            $query
+                                ->whereHas('student', function (Builder $query) use ($search) {
+                                    $query->where('first_name', 'like', "%{$search}%")
+                                        ->orWhere('last_name', 'like', "%{$search}%");
+                                })
+                                ->orWhereHas('employee', function (Builder $query) use ($search) {
+                                    $query->where('first_name', 'like', "%{$search}%")
+                                        ->orWhere('last_name', 'like', "%{$search}%");
+                                });
+                        });
+                    }),
                 Tables\Columns\BadgeColumn::make('holder_type')
                     ->label('Type')
                     ->getStateUsing(fn (NfcCard $record) => match (true) {
