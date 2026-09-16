@@ -18,7 +18,15 @@ class NfcCardImporter extends Importer
         return [
             ImportColumn::make('uid')
                 ->requiredMapping()
-                ->rules(['required', 'max:255']),
+                ->rules([
+                    'required',
+                    'max:255',
+                    function (string $attribute, $value, \Closure $fail) {
+                        if (NfcCard::where('uid', $value)->exists()) {
+                            $fail("An NFC card with UID \"{$value}\" already exists — this row was discarded.");
+                        }
+                    },
+                ]),
             // Kept as "student" for backward compatibility with the existing
             // template, but resolves against either a student or an employee
             // by ID number — whichever matches.
@@ -65,9 +73,9 @@ class NfcCardImporter extends Importer
 
     public function resolveRecord(): ?NfcCard
     {
-        return NfcCard::firstOrNew([
-            'uid' => $this->data['uid'],
-        ]);
+        // Validation above already rejects rows whose uid exists, so every
+        // row that reaches here is guaranteed new.
+        return new NfcCard();
     }
 
     public static function getCompletedNotificationBody(Import $import): string

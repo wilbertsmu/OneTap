@@ -16,7 +16,15 @@ class EmployeeImporter extends Importer
         return [
             ImportColumn::make('id_number')
                 ->requiredMapping()
-                ->rules(['required', 'max:255']),
+                ->rules([
+                    'required',
+                    'max:255',
+                    function (string $attribute, $value, \Closure $fail) {
+                        if (Employee::where('id_number', $value)->exists()) {
+                            $fail("An employee with ID Number \"{$value}\" already exists — this row was discarded.");
+                        }
+                    },
+                ]),
             ImportColumn::make('first_name')
                 ->requiredMapping()
                 ->rules(['required', 'max:255']),
@@ -34,9 +42,9 @@ class EmployeeImporter extends Importer
 
     public function resolveRecord(): ?Employee
     {
-        return Employee::firstOrNew([
-            'id_number' => $this->data['id_number'],
-        ]);
+        // Validation above already rejects rows whose id_number exists, so
+        // every row that reaches here is guaranteed new.
+        return new Employee();
     }
 
     public static function getCompletedNotificationBody(Import $import): string
