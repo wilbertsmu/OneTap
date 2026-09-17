@@ -82,17 +82,21 @@ class MissingEntries extends Page implements HasForms, HasTable
                         'employee' => 'Employees',
                     ])
                     ->required()
-                    ->live(),
+                    ->live()
+                    ->afterStateUpdated(fn () => $this->resetPage()),
                 Forms\Components\DatePicker::make('date')
                     ->required()
                     ->default(now())
-                    ->live(),
+                    ->live()
+                    ->afterStateUpdated(fn () => $this->resetPage()),
                 Forms\Components\TimePicker::make('fromTime')
                     ->label('From time (optional)')
-                    ->live(),
+                    ->live()
+                    ->afterStateUpdated(fn () => $this->resetPage()),
                 Forms\Components\TimePicker::make('toTime')
                     ->label('To time (optional)')
-                    ->live(),
+                    ->live()
+                    ->afterStateUpdated(fn () => $this->resetPage()),
             ])
             ->columns(4)
             ->statePath('data');
