@@ -5,3 +5,6 @@ templates/*
 !templates/*_import_template.csv
 !templates/*_import_template.xlsx
 !templates/README.md
+
+# Built APKs are install artifacts, not source.
+*.apk

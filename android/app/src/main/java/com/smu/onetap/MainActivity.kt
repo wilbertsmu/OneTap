@@ -17,6 +17,8 @@ import androidx.lifecycle.lifecycleScope
 import com.smu.onetap.data.ScanOutcome
 import com.smu.onetap.data.ScanRepository
 import com.smu.onetap.databinding.ActivityMainBinding
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -29,6 +31,9 @@ class MainActivity : AppCompatActivity() {
 
     /** UID -> when it was last accepted (not just last attempted) as a scan. */
     private val recentScanTimestamps = mutableMapOf<String, Long>()
+
+    /** Clears the result off the screen back to "Ready" a few seconds after it's shown. */
+    private var clearResultJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,6 +124,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleScan(uid: String) {
+        clearResultJob?.cancel()
+
         val now = System.currentTimeMillis()
         val lastAccepted = recentScanTimestamps[uid]
         val secondsSinceLast = lastAccepted?.let { (now - it) / 1000 }
@@ -129,8 +136,12 @@ class MainActivity : AppCompatActivity() {
             toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, DUPLICATE_BEEP_DURATION_MS)
             binding.resultIcon.text = "⏱️"
             binding.statusText.text = "Same card tapped ${secondsSinceLast}s ago — ignored"
+            binding.idNumberText.text = ""
             binding.studentText.text = "The card has already been recorded"
+            binding.courseText.isVisible = false
+            binding.departmentText.text = ""
             binding.detailText.text = uid
+            scheduleClear()
             return
         }
 
@@ -139,13 +150,31 @@ class MainActivity : AppCompatActivity() {
 
         binding.resultIcon.text = "⏳"
         binding.statusText.text = "Card detected — looking up…"
+        binding.idNumberText.text = ""
         binding.studentText.text = ""
+        binding.courseText.isVisible = false
+        binding.departmentText.text = ""
         binding.detailText.text = uid
 
         lifecycleScope.launch {
             val outcome = repository.submitScan(uid)
             renderOutcome(outcome)
             refreshPendingCount()
+        }
+    }
+
+    /** Blanks the result and returns the screen to "Ready", a few seconds after showing it. */
+    private fun scheduleClear() {
+        clearResultJob = lifecycleScope.launch {
+            delay(RESULT_DISPLAY_MS)
+            binding.resultIcon.text = "📶"
+            binding.statusText.text = "Ready"
+            binding.idNumberText.text = ""
+            binding.studentText.text = ""
+            binding.courseText.text = ""
+            binding.courseText.isVisible = false
+            binding.departmentText.text = ""
+            binding.detailText.text = ""
         }
     }
 
@@ -159,19 +188,31 @@ class MainActivity : AppCompatActivity() {
                 val response = outcome.response
                 when (response.result) {
                     "success" -> {
+                        val holder = response.student
+                        val isStudent = !holder?.course.isNullOrBlank()
+
                         binding.resultIcon.text = "✅"
                         binding.statusText.text = "Ready"
-                        binding.studentText.text = response.student?.fullName ?: ""
-                        binding.detailText.text = listOfNotNull(
-                            response.student?.idNumber,
-                            response.student?.course,
-                            response.student?.yearLevel
-                        ).joinToString(" • ")
+                        binding.idNumberText.text = holder?.idNumber ?: ""
+                        binding.studentText.text = holder?.fullName ?: ""
+                        if (isStudent) {
+                            binding.courseText.text = holder?.course ?: ""
+                            binding.courseText.isVisible = true
+                        } else {
+                            binding.courseText.text = ""
+                            binding.courseText.isVisible = false
+                        }
+                        binding.departmentText.text = holder?.department ?: ""
+                        binding.detailText.text = ""
+                        scheduleClear()
                     }
                     else -> {
                         binding.resultIcon.text = "⛔"
                         binding.statusText.text = response.message
+                        binding.idNumberText.text = ""
                         binding.studentText.text = response.student?.fullName ?: ""
+                        binding.courseText.isVisible = false
+                        binding.departmentText.text = ""
                         binding.detailText.text = ""
                     }
                 }
@@ -179,7 +220,10 @@ class MainActivity : AppCompatActivity() {
             is ScanOutcome.Queued -> {
                 binding.resultIcon.text = "📴"
                 binding.statusText.text = "No connection — scan saved"
+                binding.idNumberText.text = ""
                 binding.studentText.text = "Will sync automatically"
+                binding.courseText.isVisible = false
+                binding.departmentText.text = ""
                 binding.detailText.text = ""
             }
         }
@@ -227,5 +271,6 @@ class MainActivity : AppCompatActivity() {
         private const val DUPLICATE_BEEP_DURATION_MS = 150
         private const val DUPLICATE_BEEP_VOLUME = 80 // 0-100
         private const val DUPLICATE_COOLDOWN_MS = 60_000L
+        private const val RESULT_DISPLAY_MS = 5_000L
     }
 }
